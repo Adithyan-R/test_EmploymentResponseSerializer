@@ -1,0 +1,292 @@
+Test cases for EmploymentResponseSerializer
+
+
+class EmploymentResponseSerializerTestCase(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.verifier = baker.make("accounts.User")
+        cls.candidate_emp_line = baker.make(
+            "candidate_reference_response.CandidateEmploymentResponseLines",
+            candidate_reference_response=baker.make(
+                "candidate_reference_response.CandidateReferenceResponse",
+                reference_request=baker.make("reference_requests.ReferenceRequest"),
+            ),
+        )
+        cls.reference_request = baker.make("reference_requests.ReferenceRequest")
+        cls.employment_response = baker.make(
+            EmploymentResponse,
+            candidate_employment_response_line=cls.candidate_emp_line,
+            created_by=cls.verifier,
+            modified_by=cls.verifier,
+            tnc_status=EmploymentResponse.TnC_ACCEPTED,
+            status=EmploymentResponse.EMPLOYMENT_RESPONSE_DOING
+        )
+
+    def test_validate(self):
+        serializer = EmploymentResponseSerializer()
+
+        valid_data = {
+            "candidate_employment_response_line": self.candidate_emp_line,
+            "tnc_status": EmploymentResponse.TnC_ACCEPTED,
+            "rejected_reason": None
+        }
+
+        invalid_data_tnc_declined = {
+            "candidate_employment_response_line": self.candidate_emp_line,
+            "tnc_status": EmploymentResponse.TnC_DECLINED,
+            "rejected_reason": None
+        }
+
+        # Valid case: TnC accepted
+        self.assertEqual(serializer.validate(valid_data), valid_data)
+
+        # Invalid case: TnC declined without rejected reason
+        with self.assertRaises(ValidationError):
+            serializer.validate(invalid_data_tnc_declined)
+
+        # Valid case: TnC declined with rejected reason
+        valid_data_declined = valid_data.copy()
+        valid_data_declined["tnc_status"] = EmploymentResponse.TnC_DECLINED
+        valid_data_declined["rejected_reason"] = EmploymentResponse.REJECTED_REASION_ONE
+
+        self.assertEqual(serializer.validate(valid_data_declined), valid_data_declined)
+
+
+    def test_to_representation(self):
+
+        serializer = EmploymentResponseSerializer(self.employment_response)
+        data = serializer.data
+
+        expected_status = EmploymentResponse.COMPLETED
+        if self.employment_response.is_status_pending():
+            expected_status = EmploymentResponse.IN_PROGRESS
+
+        # Assertions
+        self.assertEqual(data["tnc_status"], expected_status)
+        self.assertEqual(data["status_text"], EmploymentResponse.TnC_CHOICES_DICT.get(expected_status))
+
+
+    def test_get_no_of_direct_reports_text(self):
+        no_of_direct_reports_cases = [
+            (EmploymentResponse.NA, "N/A"),
+            (EmploymentResponse.ZERO, "0"),
+            (EmploymentResponse.ONE_TWO, "1-2"),
+            (EmploymentResponse.THREE_TO_FIVE, "3-5"),
+            (EmploymentResponse.FIVE_TO_TEN, "5-10"),
+            (EmploymentResponse.MORE_THAN_TEN, "More than 10"),
+            (None, None),
+            ("invalid_value", None)
+        ]
+
+        for no_of_direct_reports, expected_text in no_of_direct_reports_cases:
+            candidate_emp_line = baker.make(
+                CandidateEmploymentResponseLines,
+                candidate_reference_response=baker.make(
+                    "candidate_reference_response.CandidateReferenceResponse",
+                    reference_request=self.reference_request,
+                ),
+            )
+
+            instance = baker.make(
+                EmploymentResponse,
+                no_of_direct_reports=no_of_direct_reports,
+                candidate_employment_response_line=candidate_emp_line,
+                created_by=self.verifier,
+                modified_by=self.verifier
+            )
+
+            serializer = EmploymentResponseSerializer(instance)
+            data = serializer.data
+
+            self.assertEqual(data.get("no_of_direct_reports_text"), expected_text)
+
+
+    def test_get_reason_for_leaving_text(self):
+        reason_for_leaving_cases = [
+            (EmploymentResponse.ANOTHER_JOB, "Another job"),
+            (EmploymentResponse.CAREER_BREAK, "Career break"),
+            (EmploymentResponse.RESIGNED, "Resigned"),
+            (EmploymentResponse.DISMISSAL, "Dismissal"),
+            (EmploymentResponse.EDUCATION, "Education"),
+            (EmploymentResponse.REDUNDANCY, "Redundancy"),
+            (EmploymentResponse.RETRENCHMENT, "Retrenchment"),
+            (EmploymentResponse.VOLUNTARY_RESIGNATION, "Voluntary resignation"),
+            (EmploymentResponse.COMPANY_ACQUISITION, "Company acquisition"),
+            (EmploymentResponse.COMPANY_MERGER, "Company merger"),
+            (EmploymentResponse.COMPANY_POLICY_PROHIBITS_DISCLOSURE, "Company policy prohibits disclosure"),
+            (EmploymentResponse.OTHER, "Other"),
+            (None, None),
+            ("invalid_value", None)
+        ]
+
+        for reason_for_leaving, expected_text in reason_for_leaving_cases:
+            candidate_emp_line = baker.make(
+                CandidateEmploymentResponseLines,
+                candidate_reference_response=baker.make(
+                    "candidate_reference_response.CandidateReferenceResponse",
+                    reference_request=self.reference_request,
+                ),
+            )
+
+            instance = baker.make(
+                EmploymentResponse,
+                reason_for_leaving=reason_for_leaving,
+                candidate_employment_response_line=candidate_emp_line,
+                created_by=self.verifier,
+                modified_by=self.verifier
+            )
+
+            serializer = EmploymentResponseSerializer(instance)
+            data = serializer.data
+
+            self.assertEqual(data.get("reason_for_leaving_text"), expected_text)
+
+
+    def test_get_eligible_for_rehire_text(self):
+        verifier = self.verifier
+
+        # Define test cases with eligible_for_rehire values and expected texts
+        test_cases = [
+            (EmploymentResponse.YES, "Yes"),
+            (EmploymentResponse.NO, "No"),
+            (EmploymentResponse.COMPANY_POLICY_PROHIBITS_DISCLOSURE, "Company policy prohibits disclosure"),
+            (EmploymentResponse.NA, "N/A"),
+            (None, None),  # Test with None value
+            ("invalid_value", None),  # Test with invalid value
+        ]
+
+        for eligible_for_rehire, expected_text in test_cases:
+            # Create related objects for CandidateEmploymentResponseLines
+            reference_request = baker.make("reference_requests.ReferenceRequest")
+            candidate_reference_response = baker.make(
+                "candidate_reference_response.CandidateReferenceResponse",
+                reference_request=reference_request,
+            )
+            candidate_emp_line = baker.make(
+                "candidate_reference_response.CandidateEmploymentResponseLines",
+                candidate_reference_response=candidate_reference_response,
+            )
+
+            # Create an EmploymentResponse instance
+            instance = baker.make(
+                EmploymentResponse,
+                eligible_for_rehire=eligible_for_rehire,
+                candidate_employment_response_line=candidate_emp_line,
+                created_by=verifier,
+                modified_by=verifier,
+            )
+
+            # Serialize the instance
+            serializer = EmploymentResponseSerializer(instance)
+            data = serializer.data
+
+            # Assert that the eligible_for_rehire_text matches the expected text
+            self.assertEqual(data.get("eligible_for_rehire_text"), expected_text)
+
+
+    def test_get_accept_reason_text(self):
+        test_cases = [
+            (EmploymentResponse.CLEAR, EmploymentResponse.TnC_ACCEPTED, "Clear"),
+            (EmploymentResponse.CAUTION, EmploymentResponse.TnC_ACCEPTED, "Caution"),
+            (EmploymentResponse.SUSPECTED, EmploymentResponse.TnC_ACCEPTED, "Suspected"),
+            (EmploymentResponse.FOR_INTERNAL_VERIFICATION, EmploymentResponse.TnC_ACCEPTED, "For internal verification"),
+            (EmploymentResponse.SUPPORTING_DOCUMENTS, EmploymentResponse.TnC_ACCEPTED, "Completed  - Verified via supporting documents"),
+            (EmploymentResponse.ROLE_NOT_VERIFIED, EmploymentResponse.TnC_ACCEPTED, "Role not verified"),
+            (EmploymentResponse.CAN_NOT_VERIFIED, EmploymentResponse.TnC_ACCEPTED, "Unable to verify"),
+            (None, EmploymentResponse.TnC_ACCEPTED, "Clear"),
+            (None, EmploymentResponse.TnC_DECLINED, "Declined"),
+            (None, EmploymentResponse.IN_PROGRESS, None),  # Test with other status
+        ]
+
+        for accept_reason, tnc_status, expected_text in test_cases:
+            # Create related objects for CandidateEmploymentResponseLines
+            reference_request = baker.make("reference_requests.ReferenceRequest")
+            candidate_reference_response = baker.make(
+                "candidate_reference_response.CandidateReferenceResponse",
+                reference_request=reference_request,
+            )
+            candidate_emp_line = baker.make(
+                "candidate_reference_response.CandidateEmploymentResponseLines",
+                candidate_reference_response=candidate_reference_response,
+            )
+
+            # Create an EmploymentResponse instance
+            instance = baker.make(
+                EmploymentResponse,
+                accept_reason=accept_reason,
+                tnc_status=tnc_status,  # Ensure tnc_status is not None
+                candidate_employment_response_line=candidate_emp_line,
+                created_by=self.verifier,
+                modified_by=self.verifier,
+            )
+
+            # Serialize the instance
+            serializer = EmploymentResponseSerializer(instance)
+            data = serializer.data
+
+            # Assert that the accept_reason_text matches the expected text
+            self.assertEqual(data.get("accept_reason_text"), expected_text)
+
+
+    def test_create(self):
+        # Prepare data for creation
+        validated_data = {
+            "candidate_employment_response_line": self.candidate_emp_line,
+            "rejected_reason": EmploymentResponse.REJECTED_REASION_FIVE,
+            "modified_by": self.verifier,
+            "tnc_status": EmploymentResponse.TnC_ACCEPTED,
+            "status": EmploymentResponse.EMPLOYMENT_RESPONSE_SUBMITTED,
+            "confirm_feedback": False,
+        }
+
+        serializer = EmploymentResponseSerializer()
+
+        # Create an EmploymentResponse instance using the serializer
+        employment_response = serializer.create(validated_data)
+
+        # Assertions
+        self.assertIsInstance(employment_response, EmploymentResponse)
+        self.assertEqual(employment_response.created_by, self.verifier)
+        self.assertEqual(employment_response.modified_by, self.verifier)
+        self.assertEqual(employment_response.status, EmploymentResponse.EMPLOYMENT_RESPONSE_SUBMITTED)
+        self.assertFalse(employment_response.confirm_feedback)
+        self.assertEqual(employment_response.rejected_reason_description, '')
+
+        # Test update with a different rejected reason
+        validated_data["rejected_reason"] = EmploymentResponse.REJECTED_REASION_ONE
+        employment_response_updated = serializer.create(validated_data)
+
+        # Assertions for updated object
+        self.assertEqual(employment_response_updated.id, employment_response.id)
+        self.assertEqual(
+            employment_response_updated.rejected_reason_description,
+            EmploymentResponse.REJECTED_REASON_DICT[EmploymentResponse.REJECTED_REASION_ONE],
+        )
+
+        # Ensure the update_or_create behavior is working
+        self.assertEqual(EmploymentResponse.objects.count(), 1)
+
+    def test_update(self):
+        updated_data = {
+            "candidate_employment_response_line": self.candidate_emp_line.id,
+            "status": EmploymentResponse.EMPLOYMENT_RESPONSE_SUBMITTED,
+            "tnc_status": EmploymentResponse.TnC_ACCEPTED,
+            "reason_for_leaving": EmploymentResponse.VOLUNTARY_RESIGNATION,
+            "no_of_direct_reports": EmploymentResponse.ONE_TWO,
+        }
+
+        serializer = EmploymentResponseSerializer(
+            instance=self.employment_response,
+            data=updated_data,
+            partial=True
+        )
+        # Assertions
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        updated_instance = serializer.save()
+
+        self.assertEqual(updated_instance.candidate_employment_response_line.id, updated_data["candidate_employment_response_line"])
+        self.assertEqual(updated_instance.tnc_status, updated_data["tnc_status"])
+        self.assertEqual(updated_instance.status, updated_data["status"])
+        self.assertEqual(updated_instance.reason_for_leaving, updated_data["reason_for_leaving"])
+        self.assertEqual(updated_instance.no_of_direct_reports, updated_data["no_of_direct_reports"])
