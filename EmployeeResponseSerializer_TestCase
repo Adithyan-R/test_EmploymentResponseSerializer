@@ -1,5 +1,4 @@
-Test cases for EmploymentResponseSerializer
-
+## Test Cases for EmploymentResponseSerializer
 
 class EmploymentResponseSerializerTestCase(TestCase):
 
@@ -20,7 +19,9 @@ class EmploymentResponseSerializerTestCase(TestCase):
             created_by=cls.verifier,
             modified_by=cls.verifier,
             tnc_status=EmploymentResponse.TnC_ACCEPTED,
-            status=EmploymentResponse.EMPLOYMENT_RESPONSE_DOING
+            status=EmploymentResponse.EMPLOYMENT_RESPONSE_DOING,
+            uploaded_file="uploads/testfile.pdf"
+
         )
 
     def test_validate(self):
@@ -52,7 +53,6 @@ class EmploymentResponseSerializerTestCase(TestCase):
 
         self.assertEqual(serializer.validate(valid_data_declined), valid_data_declined)
 
-
     def test_to_representation(self):
 
         serializer = EmploymentResponseSerializer(self.employment_response)
@@ -65,7 +65,6 @@ class EmploymentResponseSerializerTestCase(TestCase):
         # Assertions
         self.assertEqual(data["tnc_status"], expected_status)
         self.assertEqual(data["status_text"], EmploymentResponse.TnC_CHOICES_DICT.get(expected_status))
-
 
     def test_get_no_of_direct_reports_text(self):
         no_of_direct_reports_cases = [
@@ -100,7 +99,6 @@ class EmploymentResponseSerializerTestCase(TestCase):
             data = serializer.data
 
             self.assertEqual(data.get("no_of_direct_reports_text"), expected_text)
-
 
     def test_get_reason_for_leaving_text(self):
         reason_for_leaving_cases = [
@@ -141,7 +139,6 @@ class EmploymentResponseSerializerTestCase(TestCase):
             data = serializer.data
 
             self.assertEqual(data.get("reason_for_leaving_text"), expected_text)
-
 
     def test_get_eligible_for_rehire_text(self):
         verifier = self.verifier
@@ -184,14 +181,16 @@ class EmploymentResponseSerializerTestCase(TestCase):
             # Assert that the eligible_for_rehire_text matches the expected text
             self.assertEqual(data.get("eligible_for_rehire_text"), expected_text)
 
-
     def test_get_accept_reason_text(self):
         test_cases = [
             (EmploymentResponse.CLEAR, EmploymentResponse.TnC_ACCEPTED, "Clear"),
             (EmploymentResponse.CAUTION, EmploymentResponse.TnC_ACCEPTED, "Caution"),
             (EmploymentResponse.SUSPECTED, EmploymentResponse.TnC_ACCEPTED, "Suspected"),
-            (EmploymentResponse.FOR_INTERNAL_VERIFICATION, EmploymentResponse.TnC_ACCEPTED, "For internal verification"),
-            (EmploymentResponse.SUPPORTING_DOCUMENTS, EmploymentResponse.TnC_ACCEPTED, "Completed  - Verified via supporting documents"),
+            (
+                EmploymentResponse.FOR_INTERNAL_VERIFICATION, EmploymentResponse.TnC_ACCEPTED,
+                "For internal verification"),
+            (EmploymentResponse.SUPPORTING_DOCUMENTS, EmploymentResponse.TnC_ACCEPTED,
+             "Completed  - Verified via supporting documents"),
             (EmploymentResponse.ROLE_NOT_VERIFIED, EmploymentResponse.TnC_ACCEPTED, "Role not verified"),
             (EmploymentResponse.CAN_NOT_VERIFIED, EmploymentResponse.TnC_ACCEPTED, "Unable to verify"),
             (None, EmploymentResponse.TnC_ACCEPTED, "Clear"),
@@ -215,7 +214,7 @@ class EmploymentResponseSerializerTestCase(TestCase):
             instance = baker.make(
                 EmploymentResponse,
                 accept_reason=accept_reason,
-                tnc_status=tnc_status,  # Ensure tnc_status is not None
+                tnc_status=tnc_status,
                 candidate_employment_response_line=candidate_emp_line,
                 created_by=self.verifier,
                 modified_by=self.verifier,
@@ -228,6 +227,16 @@ class EmploymentResponseSerializerTestCase(TestCase):
             # Assert that the accept_reason_text matches the expected text
             self.assertEqual(data.get("accept_reason_text"), expected_text)
 
+    @patch('django.conf.settings.APP_BASE_URL', 'http://example.com')
+    def test_get_uploaded_file(self):
+        instance = self.employment_response
+        serializer = EmploymentResponseSerializer(instance)
+        data = serializer.data
+
+        expected_file_url = f"http://example.com/documents/download/{str(instance.guid)}/employment_check"
+
+        # Assertions
+        self.assertEqual(data["uploaded_file"], expected_file_url)
 
     def test_create(self):
         # Prepare data for creation
@@ -285,7 +294,8 @@ class EmploymentResponseSerializerTestCase(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         updated_instance = serializer.save()
 
-        self.assertEqual(updated_instance.candidate_employment_response_line.id, updated_data["candidate_employment_response_line"])
+        self.assertEqual(updated_instance.candidate_employment_response_line.id,
+                         updated_data["candidate_employment_response_line"])
         self.assertEqual(updated_instance.tnc_status, updated_data["tnc_status"])
         self.assertEqual(updated_instance.status, updated_data["status"])
         self.assertEqual(updated_instance.reason_for_leaving, updated_data["reason_for_leaving"])
